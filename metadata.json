@@ -1,0 +1,9 @@
+{
+  "name": "EduBoard AI",
+  "description": "A modern teaching whiteboard with PDF/PPT support, live annotation, screen recording, and AI assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
