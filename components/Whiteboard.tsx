@@ -6,6 +6,7 @@ interface WhiteboardProps {
   tool: ToolType;
   color: string;
   width: number;
+  screenStream: MediaStream | null; // NEW: Accept screen stream
   onUpdateSlide: (slideId: string, strokes: Stroke[]) => void;
 }
 
@@ -13,9 +14,10 @@ interface WhiteboardProps {
 const LASER_HOLD_MS = 2000;   // Keep visible for 2 seconds after writing stops
 const LASER_FADE_MS = 1000;   // Fade out over 1 second
 
-const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool, color, width, onUpdateSlide }, ref) => {
+const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool, color, width, screenStream, onUpdateSlide }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const memCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); // NEW: Video element for screen share
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
   
@@ -36,8 +38,42 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
     getCanvas: () => canvasRef.current
   }));
 
-  // Load background image
+  // --- SCREEN SHARE SETUP ---
   useEffect(() => {
+    const video = videoRef.current;
+    if (screenStream && video) {
+        video.srcObject = screenStream;
+        video.play().catch(e => console.error("Error playing screen stream", e));
+        
+        const handleResize = () => {
+            // Resize canvas to match the screen share resolution
+            if (video.videoWidth && video.videoHeight) {
+                setCanvasSize({ width: video.videoWidth, height: video.videoHeight });
+            }
+        };
+
+        video.addEventListener('loadedmetadata', handleResize);
+        video.addEventListener('resize', handleResize);
+
+        return () => {
+            video.removeEventListener('loadedmetadata', handleResize);
+            video.removeEventListener('resize', handleResize);
+        };
+    } else {
+        // Reset to default or slide size when stream stops
+        if (backgroundImage) {
+            setCanvasSize({ width: backgroundImage.width, height: backgroundImage.height });
+        } else {
+            setCanvasSize({ width: 1920, height: 1080 });
+        }
+    }
+  }, [screenStream, backgroundImage]);
+
+
+  // Load background image (Static Slides)
+  useEffect(() => {
+    if (screenStream) return; // Screen share takes precedence
+
     if (!slide.fullUrl) {
       setBackgroundImage(null);
       setCanvasSize({ width: 1920, height: 1080 });
@@ -47,9 +83,11 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
     img.src = slide.fullUrl;
     img.onload = () => {
       setBackgroundImage(img);
-      setCanvasSize({ width: img.width, height: img.height });
+      if (!screenStream) {
+          setCanvasSize({ width: img.width, height: img.height });
+      }
     };
-  }, [slide.fullUrl]);
+  }, [slide.fullUrl, screenStream]);
 
   // Helper to get coordinates relative to canvas resolution
   const getCoords = (e: React.MouseEvent | React.TouchEvent): Point => {
@@ -221,11 +259,17 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
-    // --- Layer 1: Background ---
+    // --- Layer 1: Background (Screen Share OR Image OR White) ---
     ctx.globalCompositeOperation = 'source-over';
+    
+    // NOTE: Don't clear rect if drawing video, video covers it. 
+    // But good practice to clear for transparency edge cases.
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    if (backgroundImage) {
+    if (screenStream && videoRef.current) {
+        // Draw the Live Video Frame
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    } else if (backgroundImage) {
       ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
     } else {
       ctx.fillStyle = '#FFFFFF';
@@ -306,10 +350,10 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
          }, 0);
     }
     
-    // Return true if we need to keep animating (if laser is fading)
-    return isDrawing || (existingLasers && laserOpacity > 0);
+    // Return true if we need to keep animating (laser fading OR screen share active)
+    return isDrawing || (existingLasers && laserOpacity > 0) || !!screenStream;
 
-  }, [slide.strokes, currentStroke, backgroundImage, slide.id, onUpdateSlide, isDrawing]);
+  }, [slide.strokes, currentStroke, backgroundImage, slide.id, onUpdateSlide, isDrawing, screenStream]);
 
 
   // Handle Resize & Resolution
@@ -318,6 +362,7 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
     if (!canvas) return;
     canvas.width = canvasSize.width;
     canvas.height = canvasSize.height;
+    // Trigger a redraw immediately when size changes
     requestAnimationFrame(redraw);
   }, [canvasSize, redraw]);
 
@@ -399,6 +444,9 @@ const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(({ slide, tool,
         onMouseEnter={() => setShowCursor(true)}
         onMouseLeave={() => setShowCursor(false)}
     >
+       {/* Hidden Video Element for Screen Capture Source */}
+       <video ref={videoRef} className="hidden" muted playsInline />
+
        {/* Eraser Cursor Overlay */}
        {isEraser && showCursor && (
            <div 

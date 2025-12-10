@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, ChevronLeft, ChevronRight, Mic, Square, 
   Download, Save, Bot, Sun, Moon, LogOut, X,
-  Pause, Play, Trash2, User, Folder
+  Pause, Play, Trash2, User, Folder, MonitorUp
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -74,6 +74,9 @@ const App: React.FC = () => {
   const [videoFilename, setVideoFilename] = useState('');
   const [recordingMimeType, setRecordingMimeType] = useState<string>('video/webm');
   const [isLoginLoading, setIsLoginLoading] = useState(false);
+
+  // Screen Share State
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
   // Recording Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -160,6 +163,8 @@ const App: React.FC = () => {
     return () => {
       if (timerIntervalRef.current) window.clearInterval(timerIntervalRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      // Clean up screen stream
+      if (screenStream) screenStream.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -240,8 +245,39 @@ const App: React.FC = () => {
     });
   };
 
-  const startProject = (project: Project) => {
+  // --- Screen Share Logic ---
+  const startScreenShare = async () => {
+      try {
+          const stream = await navigator.mediaDevices.getDisplayMedia({ 
+              video: { frameRate: 30 }, 
+              audio: false 
+          });
+          
+          setScreenStream(stream);
+          
+          // Handle user stopping share via browser UI
+          stream.getVideoTracks()[0].onended = () => {
+              setScreenStream(null);
+          };
+
+      } catch (err) {
+          console.error("Screen Share Error:", err);
+          // Don't alert if user just cancelled
+      }
+  };
+
+  const stopScreenShare = () => {
+      if (screenStream) {
+          screenStream.getTracks().forEach(t => t.stop());
+          setScreenStream(null);
+      }
+  };
+
+  const startProject = (project: Project, shouldStartScreenShare: boolean = false) => {
     setAppState(s => ({ ...s, currentProject: project, currentSlideIndex: 0 }));
+    if (shouldStartScreenShare) {
+        startScreenShare();
+    }
   };
 
   const updateSlideStrokes = (slideId: string, strokes: Stroke[]) => {
@@ -744,6 +780,21 @@ const App: React.FC = () => {
                         <option key={w} value={w}>{w}px</option>
                     ))}
                 </select>
+
+                <div className="h-8 w-px bg-gray-300 dark:bg-gray-600 mx-2" />
+
+                {/* Screen Share Button */}
+                <button
+                    onClick={screenStream ? stopScreenShare : startScreenShare}
+                    className={`p-2 rounded transition-colors ${
+                        screenStream 
+                        ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800' 
+                        : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    }`}
+                    title={screenStream ? "Stop Sharing Screen" : "Share Screen to Whiteboard"}
+                >
+                    <MonitorUp size={20} />
+                </button>
             </div>
 
             {/* Right Actions */}
@@ -810,6 +861,7 @@ const App: React.FC = () => {
                 tool={appState.tool}
                 color={appState.strokeColor}
                 width={appState.strokeWidth}
+                screenStream={screenStream} // Pass screen share stream
                 onUpdateSlide={updateSlideStrokes}
               />
            </div>

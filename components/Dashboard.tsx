@@ -1,10 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Upload, FileText, MonitorPlay, X } from 'lucide-react';
+import { Upload, FileText, MonitorPlay, X, MonitorUp } from 'lucide-react';
 import { loadPdfAsSlides } from '../utils/pdfLoader';
 import { Project } from '../types';
 
 interface DashboardProps {
-  onProjectStart: (project: Project) => void;
+  onProjectStart: (project: Project, startScreenShare?: boolean) => void;
   savedProjects: Project[]; // In a real app, this would come from local storage or DB
 }
 
@@ -36,7 +36,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectStart, savedProjects }) 
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-6">
-      <div className="max-w-4xl w-full">
+      <div className="max-w-6xl w-full">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">EduBoard AI</h1>
           <p className="text-gray-600 dark:text-gray-400 text-lg">
@@ -44,7 +44,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectStart, savedProjects }) 
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* New Project Card */}
           <div 
             onClick={() => fileInputRef.current?.click()}
@@ -99,6 +99,36 @@ const Dashboard: React.FC<DashboardProps> = ({ onProjectStart, savedProjects }) 
             </h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
               Start teaching from scratch without slides
+            </p>
+          </div>
+
+          {/* Start Screen Annotation */}
+          <div 
+             onClick={() => {
+                const blankSlide = {
+                    id: crypto.randomUUID(),
+                    fullUrl: "", 
+                    thumbnailUrl: "",
+                    strokes: [],
+                    notes: ""
+                };
+                onProjectStart({
+                    id: crypto.randomUUID(),
+                    name: "Screen Annotation",
+                    lastModified: Date.now(),
+                    slides: [blankSlide]
+                }, true)
+             }}
+            className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-gray-700 flex flex-col items-center justify-center h-64"
+          >
+            <div className="bg-blue-50 dark:bg-gray-700 p-4 rounded-full mb-4">
+               <MonitorUp className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Annotate Screen
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm text-center">
+              Share your desktop screen and write over it live
             </p>
           </div>
         </div>
